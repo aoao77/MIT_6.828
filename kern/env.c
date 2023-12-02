@@ -128,7 +128,6 @@ env_init(void)
 		envs[i].env_link = env_free_list;
 		env_free_list = &envs[i];
 	}
-	cprintf("env_free_list:0x%x envs:0x%x\n",env_free_list, &envs[0]);
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
@@ -376,8 +375,6 @@ load_icode(struct Env *e, uint8_t *binary)
 			// alloc mem space
 			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
 			// move data directly into the virtual addresses
-			struct PageInfo * t = page_lookup(e->env_pgdir, (void *)ph->p_va, NULL);
-			cprintf("memcpy des:0x%x src:0x%x size:%d p:0x%x\n", (void *)ph->p_va, binary + ph->p_offset, (size_t)ph->p_filesz, t);
 			memcpy((void *)ph->p_va, (void *)(binary + ph->p_offset), ph->p_filesz);
 			// remaining memory bytes -> zero
 			memset((void *)ph->p_va + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);

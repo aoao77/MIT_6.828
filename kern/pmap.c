@@ -434,7 +434,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	if ((pgdir[PDX(va)] & PTE_P) == PTE_P)
 	{
 		// cprintf("pgdir_walk succeed\n");
-		return (pte_t *)KADDR(PTE_ADDR(kern_pgdir[PDX(va)]))  + PTX(va);
+		return (pte_t *)KADDR(PTE_ADDR(pgdir[PDX(va)]))  + PTX(va);
 	}
 	//not exist
 	else
@@ -447,10 +447,10 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 			{
 				pte_alloc->pp_ref = 1;
 				//add into pgdir
-				pgdir[PDX(va)] = page2pa(pte_alloc) | PTE_P;
+				pgdir[PDX(va)] = page2pa(pte_alloc) | (PTE_P | PTE_U | PTE_W);
 				// cprintf("pgdir_walk succeed pgdir[PDX(va)]:0x%x PTX:%d ret:0x%x\n",(pte_t *)KADDR(PTE_ADDR(pgdir[PDX(va)])),PTX(va),(pte_t *)PTE_ADDR(pgdir[PDX(va)])+ PTX(va));
 				// cprintf("pgdir_walk succeed\n");
-				return (pte_t *)KADDR(PTE_ADDR(kern_pgdir[PDX(va)]))  + PTX(va);
+				return (pte_t *)KADDR(PTE_ADDR(pgdir[PDX(va)]))  + PTX(va);
 			}
 		}
 	}
@@ -478,11 +478,11 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	// Fill this function in
 	for (size_t i = 0; i < size; i += PGSIZE)
 	{
-		pte_t* pte_ptr= pgdir_walk(kern_pgdir, (void *)va + i ,1);
+		pte_t* pte_ptr= pgdir_walk(pgdir, (void *)va + i ,1);
 		if (pte_ptr != NULL)
 		{
 			*pte_ptr = (pa + i) | perm | PTE_P;
-			kern_pgdir[PDX(va + i)] |= (perm | PTE_P);
+			pgdir[PDX(va + i)] |= (perm | PTE_P);
 		}
 	}
 }
@@ -516,42 +516,25 @@ int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
-	// cprintf("page_insert pp:0x%x va:0x%x perm:%d\n",pp,va,perm);
-	//find pte
-	uint16_t pp_ref_before = pp->pp_ref;
-	pte_t * pte_item = pgdir_walk(pgdir, va, false);
-	if (pte_item != NULL)
-	 {
-		// cprintf("page_insert *pte_item:0x%x\n",*pte_item);
-		//find page
-		if((*pte_item & PTE_P) == PTE_P)
-		{
+	pte_t *pte = pgdir_walk(pgdir, va, 1);
+	
+	if (!pte) {
+		return -E_NO_MEM;
+	}
+	
+	if (*pte & PTE_P) {
+		if (PTE_ADDR(*pte) == page2pa(pp)) {
+			pp->pp_ref--;
+		}
+		else {
 			page_remove(pgdir, va);
 		}
 	}
-	//alloc
-	pte_item = pgdir_walk(pgdir, va, true);
-	//alloc pte succeed
-	if (pp_ref_before != pp->pp_ref && pp->pp_ref == 0)
-	{
-		struct PageInfo* pp_alloc = page_alloc(0);
-		assert(pp == pp_alloc);
-	}
 	
-	if (pte_item != NULL)
-	{
-		//add pte_item
-		*pte_item = page2pa(pp) | perm | PTE_P;
-		//add pdt permission Q:just add ?
-		kern_pgdir[PDX(va)] |= perm;
-		//increment
-		assert(pp != NULL);
-		pp->pp_ref++;
-		// cprintf("page_insert success\n");
-		return 0;
-	}
+	pp->pp_ref++;
+	*pte = page2pa(pp)| perm | PTE_P;
 	
-	return -E_NO_MEM;
+	return 0;
 }
 
 //
@@ -608,7 +591,7 @@ page_remove(pde_t *pgdir, void *va)
 {
 	// cprintf("page_remove va:0x%x\n",va);
 	// Fill this function in
-	pte_t *pte_item = (pte_t *)1;
+	pte_t *pte_item;
 	struct PageInfo * page_item = page_lookup(pgdir, va, &pte_item);
 	//find page
 	if (page_item != (struct PageInfo *)NULL)
@@ -624,7 +607,6 @@ page_remove(pde_t *pgdir, void *va)
 			tlb_invalidate(pgdir, va);
 		}
 	}
-	
 }
 
 //
@@ -671,7 +653,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 			user_mem_check_addr = i;
 			return -E_FAULT;
 		}
-		pte_t * pte_item = pgdir_walk(kern_pgdir, (void *)i, 0);
+		pte_t * pte_item = pgdir_walk(env->env_pgdir, (void *)i, 0);
 		// pte not exist
 		if (pte_item == NULL)
 		{
@@ -680,7 +662,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 		}
 		// no permission
 		// if ((perm & PTE_U) != ((*pte_item) & PTE_U))
-		if ((perm & (*pte_item)) == perm)
+		if ((perm & (*pte_item)) != perm)
 		{
 			user_mem_check_addr = i;
 			return -E_FAULT;
