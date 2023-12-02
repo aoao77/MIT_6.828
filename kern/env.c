@@ -114,7 +114,6 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 void
 env_init(void)
 {
-	cprintf("env_init\n");
 	// Set up envs array
 	// LAB 3: Your code here.
 	env_free_list = NULL;
@@ -166,7 +165,6 @@ env_init_percpu(void)
 static int
 env_setup_vm(struct Env *e)
 {
-	cprintf("env_setup_vm\n");
 	int i;
 	struct PageInfo *p = NULL;
 
@@ -214,7 +212,6 @@ env_setup_vm(struct Env *e)
 int
 env_alloc(struct Env **newenv_store, envid_t parent_id)
 {
-	cprintf("env_alloc\n");
 	int32_t generation;
 	int r;
 	struct Env *e;
@@ -292,7 +289,6 @@ region_alloc(struct Env *e, void *va, size_t len)
 	{
 		struct PageInfo *p = NULL;
 
-		cprintf("va:0x%x\n",i);
 		// Allocate a page for the page directory
 		if (!(p = page_alloc(!ALLOC_ZERO)))
 			panic("region_alloc page_alloc error!!! addr:0x%x", i) ;
@@ -329,7 +325,6 @@ region_alloc(struct Env *e, void *va, size_t len)
 static void
 load_icode(struct Env *e, uint8_t *binary)
 {
-	cprintf("load_icode\n");
 	// Hints:
 	//  Load each program segment into virtual memory
 	//  at the address specified in the ELF segment header.
@@ -403,7 +398,6 @@ load_icode(struct Env *e, uint8_t *binary)
 void
 env_create(uint8_t *binary, enum EnvType type)
 {
-	cprintf("env_create\n");
 	// LAB 3: Your code here.
 	struct Env *env = NULL;
 	// Allocates a new env with env_alloc
@@ -422,7 +416,6 @@ env_create(uint8_t *binary, enum EnvType type)
 void
 env_free(struct Env *e)
 {
-	cprintf("env_free\n");
 	pte_t *pt;
 	uint32_t pdeno, pteno;
 	physaddr_t pa;
@@ -493,7 +486,6 @@ env_destroy(struct Env *e)
 void
 env_pop_tf(struct Trapframe *tf)
 {
-	cprintf("env_pop_tf\n");
 	asm volatile(
 		"\tmovl %0,%%esp\n"
 		"\tpopal\n"
@@ -514,7 +506,6 @@ env_pop_tf(struct Trapframe *tf)
 void
 env_run(struct Env *e)
 {
-	cprintf("env_run\n");
 	// Step 1: If this is a context switch (a new environment is running):
 	//	   1. Set the current environment (if any) back to
 	//	      ENV_RUNNABLE if it is ENV_RUNNING (think about

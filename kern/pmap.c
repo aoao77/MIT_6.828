@@ -18,7 +18,7 @@ static size_t npages_basemem;	// Amount of base memory (in pages)
 pde_t *kern_pgdir;		// Kernel's initial page directory
 struct PageInfo *pages;		// Physical page state array
 static struct PageInfo *page_free_list;	// Free list of physical pages
-
+#define M_CPRINTF	
 
 // --------------------------------------------------------------
 // Detect machine's physical memory setup.
@@ -353,11 +353,13 @@ page_init(void)
 struct PageInfo *
 page_alloc(int alloc_flags)
 {
-	// cprintf("page_alloc alloc_flags:%d page_free_list:0x%x\n",alloc_flags, page_free_list);
 	// Fill this function in
 	if (page_free_list == NULL)
 	{
-		return NULL;
+#ifdef M_CPRINTF
+	cprintf("page_alloc failed!!! no free pg\n");
+#endif
+	return NULL;
 	}
 	struct PageInfo * temp_head = page_free_list;
 	assert(temp_head != NULL);
@@ -369,7 +371,9 @@ page_alloc(int alloc_flags)
 	}
 	//set pp_link to NULL BUT do not set the ref_count
 	temp_head->pp_link = NULL;
-	// cprintf("page_alloc success addr:0x%x page_free_list:0x%x\n",temp_head, page_free_list);
+// #ifdef M_CPRINTF
+// 	cprintf("page_alloc success ph_addr:0x%x \n", page2pa(temp_head));
+// #endif
 	return temp_head;
 }
 
@@ -431,30 +435,33 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// cprintf("pgdir_walk va:0x%x create:%d\n",va,create);
 	// exist
-	if ((pgdir[PDX(va)] & PTE_P) == PTE_P)
-	{
-		// cprintf("pgdir_walk succeed\n");
+	if ((pgdir[PDX(va)] & PTE_P) == PTE_P) {
+// #ifdef M_CPRINTF
+// 	cprintf("pgdir_walk pte existed pgdir:0x%x va:0x%x \n", pgdir, (uint32_t)va);
+// #endif
 		return (pte_t *)KADDR(PTE_ADDR(pgdir[PDX(va)]))  + PTX(va);
 	}
 	//not exist
 	else
 	{
-		if (create == true)
-		{
+		if (create) {
 			struct PageInfo *pte_alloc = page_alloc(1);
 			//allocation succeed
-			if (pte_alloc != (struct PageInfo *)NULL)
-			{
+			if (pte_alloc) {
 				pte_alloc->pp_ref = 1;
 				//add into pgdir
 				pgdir[PDX(va)] = page2pa(pte_alloc) | (PTE_P | PTE_U | PTE_W);
-				// cprintf("pgdir_walk succeed pgdir[PDX(va)]:0x%x PTX:%d ret:0x%x\n",(pte_t *)KADDR(PTE_ADDR(pgdir[PDX(va)])),PTX(va),(pte_t *)PTE_ADDR(pgdir[PDX(va)])+ PTX(va));
-				// cprintf("pgdir_walk succeed\n");
-				return (pte_t *)KADDR(PTE_ADDR(pgdir[PDX(va)]))  + PTX(va);
+// #ifdef M_CPRINTF
+// 				cprintf("pgdir_walk create va:0x%x \n", (uint32_t)va);
+// #endif
+			return (pte_t *)KADDR(PTE_ADDR(pgdir[PDX(va)]))  + PTX(va);
 			}
 		}
 	}
-	
+#ifdef M_CPRINTF
+	cprintf("pgdir_walk not found!!! pgdir:0x%x va:0x%x create:%d\n", pgdir, (uint32_t)va, create);
+#endif
+
 	return NULL;
 }
 
@@ -479,7 +486,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	for (size_t i = 0; i < size; i += PGSIZE)
 	{
 		pte_t* pte_ptr= pgdir_walk(pgdir, (void *)va + i ,1);
-		if (pte_ptr != NULL)
+		if (pte_ptr)
 		{
 			*pte_ptr = (pa + i) | perm | PTE_P;
 			pgdir[PDX(va + i)] |= (perm | PTE_P);
@@ -519,7 +526,10 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	pte_t *pte = pgdir_walk(pgdir, va, 1);
 	
 	if (!pte) {
-		return -E_NO_MEM;
+#ifdef M_CPRINTF
+	cprintf("pgdir_insert failed!!! pgdir:0x%x va:0x%x \n", pgdir, (uint32_t)va);
+#endif
+	return -E_NO_MEM;
 	}
 	
 	if (*pte & PTE_P) {
@@ -554,20 +564,18 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	// cprintf("page_lookup va:0x%x pte_store:0x%x\n",va,pte_store);
 	pte_t* pte = pgdir_walk(pgdir, va, false);
 	//pte exist
-	if (pte != (pte_t*)NULL)
-	{
+	if (pte) {
 		//pte_store
-		if (pte_store != (pte_t **)NULL)
-		{
+		if (pte_store)
 			*pte_store = pte;
-		}
 		//return page
-		if ((*pte & PTE_P) == PTE_P)
-		{
+		if (*pte & PTE_P)
 			return pa2page(PTE_ADDR(*pte));
-		}
 	}
 
+#ifdef M_CPRINTF
+	cprintf("pgdir_lookup failed pgdir:0x%x va:0x%x \n", pgdir, (uint32_t)va);
+#endif
 	return NULL;
 }
 
@@ -594,13 +602,13 @@ page_remove(pde_t *pgdir, void *va)
 	pte_t *pte_item;
 	struct PageInfo * page_item = page_lookup(pgdir, va, &pte_item);
 	//find page
-	if (page_item != (struct PageInfo *)NULL)
+	if (page_item)
 	{
 		//ref count decrement & free
 		page_decref(page_item);
 		//remove pte
 		//pte exist
-		if (pte_item != (pte_t *)NULL)
+		if (pte_item)
 		{
 			//pte set to 0
 			*pte_item = 0;
