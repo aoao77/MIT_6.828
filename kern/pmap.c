@@ -18,7 +18,7 @@ static size_t npages_basemem;	// Amount of base memory (in pages)
 pde_t *kern_pgdir;		// Kernel's initial page directory
 struct PageInfo *pages;		// Physical page state array
 static struct PageInfo *page_free_list;	// Free list of physical pages
-#define M_CPRINTF	
+#define M_CPRINTF
 
 // --------------------------------------------------------------
 // Detect machine's physical memory setup.
