@@ -68,6 +68,7 @@ TRAPHANDLER(Handler_ALIGN,T_ALIGN)
 TRAPHANDLER_NOEC(Handler_MCHK,T_MCHK)
 TRAPHANDLER_NOEC(Handler_SIMDERR,T_SIMDERR)
 
+TRAPHANDLER_NOEC(Handler_SYSCALL,T_SYSCALL)
 
 /*
  * Lab 3: Your code here for _alltraps
@@ -75,10 +76,8 @@ TRAPHANDLER_NOEC(Handler_SIMDERR,T_SIMDERR)
 
 .global _alltraps
 _alltraps:
-	pushw $0
-	pushw %ds
-	pushw $0
-	pushw %es
+	pushl %ds
+	pushl %es
 	pushal
 	movw $(GD_KD),%ax
 	movw %ax,%es

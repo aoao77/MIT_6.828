@@ -525,19 +525,14 @@ env_run(struct Env *e)
 
 	// LAB 3: Your code here.
 	// a new environment
-	if (e != curenv)
-	{
-		if (curenv != NULL && curenv->env_status == ENV_RUNNING)
-			curenv->env_status = ENV_RUNNABLE;
-		curenv = e;
-		e->env_status = ENV_RUNNING;
-		e->env_runs++;
-		// struct PageInfo * look_page = page_lookup(kern_pgdir, e, NULL);
-		// page_insert(e->env_pgdir, look_page, e, PTE_U);
-		lcr3(PADDR(e->env_pgdir));
-		env_pop_tf(&e->env_tf);
-	}
-
-	panic("env_run not yet implemented");
+	if (curenv != NULL && curenv->env_status == ENV_RUNNING)
+		curenv->env_status = ENV_RUNNABLE;
+	curenv = e;
+	e->env_status = ENV_RUNNING;
+	e->env_runs++;
+	// struct PageInfo * look_page = page_lookup(kern_pgdir, e, NULL);
+	// page_insert(e->env_pgdir, look_page, e, PTE_U);
+	lcr3(PADDR(e->env_pgdir));
+	env_pop_tf(&e->env_tf);
 }
 

@@ -655,24 +655,27 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 	// LAB 3: Your code here.
 	for (size_t i = ROUNDDOWN((size_t)va, PGSIZE); i <= ROUNDDOWN((size_t)va + len, PGSIZE); i += PGSIZE)
 	{
+
+		user_mem_check_addr = i < (uintptr_t)va ? (uintptr_t)va : i;
+		
 		// excess ULIM
 		if (i >= ULIM)
 		{
-			user_mem_check_addr = i;
+			cprintf("use_mem_check addr over ULIM\n");
 			return -E_FAULT;
 		}
 		pte_t * pte_item = pgdir_walk(env->env_pgdir, (void *)i, 0);
 		// pte not exist
 		if (pte_item == NULL)
 		{
-			user_mem_check_addr = i;
+			cprintf("use_mem_check pte not exist\n");
 			return -E_FAULT;
 		}
 		// no permission
 		// if ((perm & PTE_U) != ((*pte_item) & PTE_U))
 		if ((perm & (*pte_item)) != perm)
 		{
-			user_mem_check_addr = i;
+			cprintf("use_mem_check perm error\n");
 			return -E_FAULT;
 		}
 	}
