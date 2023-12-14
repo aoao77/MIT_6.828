@@ -558,6 +558,7 @@ env_run(struct Env *e)
 	e->env_runs++;
 	// struct PageInfo * look_page = page_lookup(kern_pgdir, e, NULL);
 	// page_insert(e->env_pgdir, look_page, e, PTE_U);
+	unlock_kernel();
 	lcr3(PADDR(e->env_pgdir));
 	env_pop_tf(&e->env_tf);
 }
