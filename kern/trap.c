@@ -92,29 +92,42 @@ trap_init(void)
 	void Handler_MCHK (void);
 	void Handler_SIMDERR (void);
 	// LAB 3: Your code here.
-	SETGATE(idt[T_DIVIDE],  1, GD_KT, Handler_DIVIDE,  0);
-	SETGATE(idt[T_DEBUG],   1, GD_KT, Handler_DEBUG,   3);
-	SETGATE(idt[T_NMI],     1, GD_KT, Handler_NMI,	   0);
-	SETGATE(idt[T_BRKPT],   1, GD_KT, Handler_BRKPT,   3);
-	SETGATE(idt[T_OFLOW],   1, GD_KT, Handler_OFLOW,   0);
-	SETGATE(idt[T_BOUND],   1, GD_KT, Handler_BOUND,   0);
-	SETGATE(idt[T_ILLOP],   1, GD_KT, Handler_ILLOP,   0);
-	SETGATE(idt[T_DEVICE],  1, GD_KT, Handler_DEVICE,  0);
-	SETGATE(idt[T_DBLFLT],  1, GD_KT, Handler_DBLFLT,  0);
-	// SETGATE(idt[T_COPROC], 1, GD_KT, Handler_COPROC,0);
-	SETGATE(idt[T_TSS],     1, GD_KT, Handler_TSS,     0);
-	SETGATE(idt[T_SEGNP],   1, GD_KT, Handler_SEGNP,   0);
-	SETGATE(idt[T_STACK],   1, GD_KT, Handler_STACK,   0);
-	SETGATE(idt[T_GPFLT],   1, GD_KT, Handler_GPFLT,   0);
-	SETGATE(idt[T_PGFLT],   1, GD_KT, Handler_PGFLT,   0);
-	// SETGATE(idt[T_RES], 1, GD_KT, Handler_RES,0);
-	SETGATE(idt[T_FPERR],   1, GD_KT, Handler_FPERR,   0);
-	SETGATE(idt[T_ALIGN],   1, GD_KT, Handler_ALIGN,   0);
-	SETGATE(idt[T_MCHK],    1, GD_KT, Handler_MCHK,    0);
-	SETGATE(idt[T_SIMDERR], 1, GD_KT, Handler_SIMDERR, 0);
+	SETGATE(idt[T_DIVIDE],  0, GD_KT, Handler_DIVIDE,  0);
+	SETGATE(idt[T_DEBUG],   0, GD_KT, Handler_DEBUG,   3);
+	SETGATE(idt[T_NMI],     0, GD_KT, Handler_NMI,	   0);
+	SETGATE(idt[T_BRKPT],   0, GD_KT, Handler_BRKPT,   3);
+	SETGATE(idt[T_OFLOW],   0, GD_KT, Handler_OFLOW,   0);
+	SETGATE(idt[T_BOUND],   0, GD_KT, Handler_BOUND,   0);
+	SETGATE(idt[T_ILLOP],   0, GD_KT, Handler_ILLOP,   0);
+	SETGATE(idt[T_DEVICE],  0, GD_KT, Handler_DEVICE,  0);
+	SETGATE(idt[T_DBLFLT],  0, GD_KT, Handler_DBLFLT,  0);
+	// SETGATE(idt[T_COPROC], 0, GD_KT, Handler_COPROC,0);
+	SETGATE(idt[T_TSS],     0, GD_KT, Handler_TSS,     0);
+	SETGATE(idt[T_SEGNP],   0, GD_KT, Handler_SEGNP,   0);
+	SETGATE(idt[T_STACK],   0, GD_KT, Handler_STACK,   0);
+	SETGATE(idt[T_GPFLT],   0, GD_KT, Handler_GPFLT,   0);
+	SETGATE(idt[T_PGFLT],   0, GD_KT, Handler_PGFLT,   0);
+	// SETGATE(idt[T_RES], 0, GD_KT, Handler_RES,0);
+	SETGATE(idt[T_FPERR],   0, GD_KT, Handler_FPERR,   0);
+	SETGATE(idt[T_ALIGN],   0, GD_KT, Handler_ALIGN,   0);
+	SETGATE(idt[T_MCHK],    0, GD_KT, Handler_MCHK,    0);
+	SETGATE(idt[T_SIMDERR], 0, GD_KT, Handler_SIMDERR, 0);
 
 	void Handler_SYSCALL (void);
 	SETGATE(idt[T_SYSCALL], 0, GD_KT, Handler_SYSCALL, 3);
+
+	void Handler_IRQ_TIMER (void);
+	void Handler_IRQ_KBD (void);
+	void Handler_IRQ_SERIAL (void);
+	void Handler_IRQ_SPURIOUS (void);
+	void Handler_IRQ_IDE (void);
+	SETGATE(idt[IRQ_OFFSET+IRQ_TIMER],    0, GD_KT, Handler_IRQ_TIMER,    3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_KBD],      0, GD_KT, Handler_IRQ_KBD,      3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SERIAL],   0, GD_KT, Handler_IRQ_SERIAL,   3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SPURIOUS], 0, GD_KT, Handler_IRQ_SPURIOUS, 3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_IDE],      0, GD_KT, Handler_IRQ_IDE,      3);
+
+
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -151,6 +164,7 @@ trap_init_percpu(void)
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
+	assert(cpunum() == thiscpu->cpu_id);
 	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - (thiscpu->cpu_id) * (KSTKSIZE + KSTKGAP);
 	thiscpu->cpu_ts.ts_ss0 = GD_KD;
 	thiscpu->cpu_ts.ts_iomb = sizeof(struct Taskstate);
@@ -249,6 +263,12 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		sched_yield();
+		return;
+	}
+
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
