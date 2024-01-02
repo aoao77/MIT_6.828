@@ -62,7 +62,19 @@ alloc_block(void)
 	// super->s_nblocks blocks in the disk altogether.
 
 	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
+	// panic("alloc_block not implemented");
+	for (size_t i = 0; i < super->s_nblocks; i++)
+	{
+		if(block_is_free(i)) {
+			if (i == 0)
+				continue;
+			bitmap[i/32] ^= 1<<(i%32);
+			assert((bitmap[i/32] & 1<<(i%32)) == 0);
+			flush_block(diskaddr(i/BLKBITSIZE+2));
+			return i;
+		}
+	}
+
 	return -E_NO_DISK;
 }
 
@@ -135,7 +147,34 @@ static int
 file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
        // LAB 5: Your code here.
-       panic("file_block_walk not implemented");
+    //    panic("file_block_walk not implemented");
+	if(filebno >= NDIRECT + NINDIRECT)
+		return -E_INVAL;
+	if (filebno < NDIRECT) {
+		if(ppdiskbno)
+			*ppdiskbno = f->f_direct + filebno;
+	}
+	else {
+		//no indirect need allocate
+		if (f->f_indirect == 0)
+		{
+			if (alloc == 0)
+				return -E_NOT_FOUND;
+			int r;
+			//indirect block
+			if((r = alloc_block()) < 0)
+				return -E_NO_DISK;
+			f->f_indirect = r;
+		}
+		//entry
+		uint32_t* indirect_addr = diskaddr(f->f_indirect);
+		if(ppdiskbno)
+			*ppdiskbno = indirect_addr + (filebno - NDIRECT);
+	}
+	if(*ppdiskbno == (uint32_t*)0)
+		panic("note that *ppdiskbno might equal 0\n");
+	
+	return 0;
 }
 
 // Set *blk to the address in memory where the filebno'th
@@ -150,7 +189,25 @@ int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
        // LAB 5: Your code here.
-       panic("file_get_block not implemented");
+    //    panic("file_get_block not implemented");
+	if (filebno >= NDIRECT + NINDIRECT)
+		return -E_INVAL;
+	
+	int r;
+	uint32_t* pblockno;
+	if ((r = file_block_walk(f, filebno, &pblockno, 1)) < 0)
+		return r;
+	
+	if (pblockno && *pblockno == 0)
+	{
+		if((r = alloc_block()) < 0)
+			return -E_NO_DISK;
+		*pblockno = r;
+	}
+	if(blk)
+		*blk = diskaddr(*pblockno);
+	
+	return 0;
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
@@ -335,7 +392,6 @@ file_read(struct File *f, void *buf, size_t count, off_t offset)
 		pos += bn;
 		buf += bn;
 	}
-
 	return count;
 }
 
