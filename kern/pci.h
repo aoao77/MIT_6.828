@@ -2,6 +2,7 @@
 #define JOS_KERN_PCI_H
 
 #include <inc/types.h>
+#include <inc/error.h>
 
 // PCI subsystem interface
 enum { pci_res_bus, pci_res_mem, pci_res_io, pci_res_max };
@@ -29,5 +30,6 @@ struct pci_bus {
 
 int  pci_init(void);
 void pci_func_enable(struct pci_func *f);
+int pci_transmit_descriptor(void* src, size_t len);
 
 #endif

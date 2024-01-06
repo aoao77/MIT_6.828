@@ -4,6 +4,7 @@
 #include <kern/pci.h>
 #include <kern/pcireg.h>
 #include <kern/e1000.h>
+#include <kern/pmap.h>
 
 // Flag to do "lspci" at bootup
 static int pci_show_devs = 1;
@@ -15,6 +16,10 @@ static uint32_t pci_conf1_data_ioport = 0x0cfc;
 
 // Forward declarations
 static int pci_bridge_attach(struct pci_func *pcif);
+static int pci_e1000_attach(struct pci_func *pcif);
+
+volatile uint32_t *pci;
+volatile struct transmit_descriptor* base_ptr;
 
 // PCI driver table
 struct pci_driver {
@@ -31,6 +36,7 @@ struct pci_driver pci_attach_class[] = {
 // pci_attach_vendor matches the vendor ID and device ID of a PCI device. key1
 // and key2 should be the vendor ID and device ID respectively
 struct pci_driver pci_attach_vendor[] = {
+	{ E1000_VERDOR_ID, E1000_DEVICE_ID, &pci_e1000_attach },
 	{ 0, 0, 0 },
 };
 
@@ -254,4 +260,64 @@ pci_init(void)
 	memset(&root_bus, 0, sizeof(root_bus));
 
 	return pci_scan_bus(&root_bus);
+}
+
+static int pci_e1000_attach(struct pci_func* pcif)
+{
+	pci_func_enable(pcif);
+	pci = mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
+	cprintf("pci status:0x%x\n",pci[STATUS]);
+	struct PageInfo* pp;
+	if(!(pp = page_alloc(ALLOC_ZERO)))
+		panic("page_alloc err");
+	// TDBAL TDLEN
+	pci[TDBAL] = page2pa(pp);
+	// cprintf("TDBAL:%p\n", pci[TDBAL]);
+	pci[TDLEN] = MAX_TRANSMIT_DESCRIPTOR * TRANSMIT_DESCRIPTOR_BYTE;
+	// set packet buffer
+	base_ptr = page2kva(pp);
+	// cprintf("base_ptr:%p\n",base_ptr);
+	for (size_t i = 0; i < MAX_TRANSMIT_DESCRIPTOR; )
+	{
+		size_t k = PGSIZE / MAX_ETHERNET_PACKET;
+		if(!(pp = page_alloc(ALLOC_ZERO)))
+			panic("page_alloc err");
+		(base_ptr + i)->addr = page2pa(pp);
+		(base_ptr + i + 1)->addr = page2pa(pp) + PGSIZE / 2;
+		// cprintf("phy:0x%x ", page2pa(pp));
+		// cprintf("td:%d addr:0x%x ", i, (base_ptr + i)->addr);
+		// cprintf("td:%d addr:0x%x \n",(i + 1), (base_ptr + i + 1)->addr);
+		i += k;
+	}
+	// TDH TDT TCTL TIPG
+	pci[TDH] = 0;
+	pci[TDT] = 0;
+	pci[TCTL] |= (1 << TCTL_EN);
+	pci[TCTL] |= (1 << TCTL_PSP);
+	pci[TCTL] |= (0x40 << TCTL_COLD_s); /* 40h in full-duplex mode */
+	pci[TIPG] |= 0xa;
+	pci[TIPG] |= (0x8 << TIPG_IPGR1); /* only in half-duplex mode */
+	pci[TIPG] |= (0x6 << TIPG_IPGR2); /* only in half-duplex mode */
+
+	return 1;
+}
+
+int pci_transmit_descriptor(void* src, size_t len)
+{
+	// update 
+	size_t packet_start_idx = pci[TDT];
+	// full queue
+	size_t target_idx = packet_start_idx % MAX_TRANSMIT_DESCRIPTOR;
+
+	if (((base_ptr+target_idx)->cmd & (1 << TD_CMD_RS)) == 1  
+	&& ((base_ptr+target_idx)->status & (1 << TD_STATUS_DD)) == 0)
+		return -E_QUEUE_FULL;
+	// copy packet data
+	memmove(KADDR((base_ptr + target_idx)->addr), src, len);
+	(base_ptr + target_idx)->cmd |= 1 << TD_CMD_RS;
+	//add end_ptr
+	packet_start_idx++;
+	pci[TDT] = packet_start_idx % MAX_TRANSMIT_DESCRIPTOR;
+
+	return 0;
 }

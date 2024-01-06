@@ -12,6 +12,8 @@
 #include <kern/console.h>
 #include <kern/sched.h>
 #include <kern/time.h>
+#include <kern/e1000.h>
+#include <kern/pci.h>
 
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
@@ -430,7 +432,35 @@ static int
 sys_time_msec(void)
 {
 	// LAB 6: Your code here.
-	panic("sys_time_msec not implemented");
+	// panic("sys_time_msec not implemented");
+	return time_msec();
+}
+
+static int
+sys_transmit_descriptor(void* buffer, size_t size)
+{
+	
+	if ((uint32_t)buffer >= UTOP)
+		return -E_INVAL;
+	
+	size_t transmitted_len = 0;
+	int r = 0;
+
+	while (1)
+	{
+		if (size > MAX_ETHERNET_PACKET) {
+			if((r = pci_transmit_descriptor(buffer + transmitted_len, MAX_ETHERNET_PACKET)) < 0)
+				return r;
+			size -= MAX_ETHERNET_PACKET;
+			transmitted_len += MAX_ETHERNET_PACKET;
+		}
+		else {
+			if((r = pci_transmit_descriptor(buffer + transmitted_len, size)) < 0)
+				return r;
+			break;
+		}
+	}
+	return 0;
 }
 
 // Dispatches to the correct kernel function, passing the arguments.
@@ -485,7 +515,14 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		break;
 	case SYS_env_set_trapframe:
 		r = sys_env_set_trapframe(a1, (struct Trapframe *)a2);
+		break;
+	case SYS_time_msec:
+		r = sys_time_msec();
 		break;	
+	case SYS_transmit_descriptor:
+		r = sys_transmit_descriptor((void *)a1, a2);
+		break;	
+
 	default:
 		return -E_INVAL;
 	}
